@@ -40,3 +40,11 @@ class PortfolioState(TypedDict):
     # allocation node, e.g. {"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}.
     # Percentages must sum to 100 across all tickers.
     allocations: dict[str, float]
+
+    # -------------------------------------------------------------------------
+    # FINAL OUTPUT — produced by output_formatter, consumed by the UI
+    # -------------------------------------------------------------------------
+
+    # A fully formatted markdown string ready to be rendered by Streamlit.
+    # Produced by output_formatter as the last step of the graph.
+    final_output: str
