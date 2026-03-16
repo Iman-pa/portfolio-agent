@@ -17,6 +17,7 @@ from agent.state import PortfolioState
 # has the signature  (state: PortfolioState) -> dict  — it reads whatever
 # fields it needs from state and returns only the fields it changes.
 from agent.nodes.portfolio_loader import portfolio_loader
+from agent.nodes.macro_fetcher import macro_fetcher
 from agent.nodes.research_loop import research_loop
 from agent.nodes.allocation_decider import allocation_decider
 from agent.nodes.output_formatter import output_formatter
@@ -55,18 +56,23 @@ graph_builder = StateGraph(PortfolioState)
 
 # LINE 48-51: Register each node.  The first argument is the *name* used in
 # edge declarations; the second is the Python callable that implements it.
-graph_builder.add_node("portfolio_loader",  portfolio_loader)
-graph_builder.add_node("research_loop",     research_loop)
+graph_builder.add_node("portfolio_loader",   portfolio_loader)
+graph_builder.add_node("macro_fetcher",      macro_fetcher)
+graph_builder.add_node("research_loop",      research_loop)
 graph_builder.add_node("allocation_decider", allocation_decider)
-graph_builder.add_node("output_formatter",  output_formatter)
+graph_builder.add_node("output_formatter",   output_formatter)
 
 # LINE 54: Declare the entry point.  LangGraph will call `portfolio_loader`
 # first when `.invoke()` is called on the compiled graph.
 graph_builder.set_entry_point("portfolio_loader")
 
-# LINE 58: Unconditional edge — after `portfolio_loader` finishes, always
-# move straight to `research_loop` with no branching logic.
-graph_builder.add_edge("portfolio_loader", "research_loop")
+# Unconditional edge — after `portfolio_loader` finishes, always move to
+# `macro_fetcher` to collect market-wide context before research begins.
+graph_builder.add_edge("portfolio_loader", "macro_fetcher")
+
+# Unconditional edge — after `macro_fetcher` finishes, move straight to
+# `research_loop`.  macro_context is now available in state for all nodes.
+graph_builder.add_edge("macro_fetcher", "research_loop")
 
 # LINE 62-70: Conditional edge — after `research_loop` finishes, call
 # `should_continue_research` with the current state.  The returned string is

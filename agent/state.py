@@ -23,6 +23,15 @@ class PortfolioState(TypedDict):
     current_ticker_index: int
 
     # -------------------------------------------------------------------------
+    # MACRO CONTEXT — fetched once after the portfolio is loaded
+    # -------------------------------------------------------------------------
+
+    # Market-wide indicators fetched by macro_fetcher, e.g.
+    # {'vix': 18.3, 'yield_10y': 4.6, 'spy_price': 542.1}.
+    # Plain English keys make it easy to reference in prompts and the UI.
+    macro_context: dict[str, float]
+
+    # -------------------------------------------------------------------------
     # RESEARCH ACCUMULATOR — grows as each stock is researched
     # -------------------------------------------------------------------------
 
