@@ -6,9 +6,70 @@ system: |
   Example output format: {{"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}}
 
 user: |
+  Here are the current market conditions:
+  - VIX (market volatility index): {vix}
+  - 10-Year Treasury Yield: {yield_10y}%
+  - SPY (S&P 500 ETF price): ${spy_price}
+
   Here are the research reports for each stock in the portfolio:
 
   {research_results}
 
-  Based on the research above, decide the optimal percentage allocation for each stock.
-  Return ONLY the JSON object.
+  Investment strategy instruction:
+  {strategy_instruction}
+
+  Following the strategy instruction strictly, decide the optimal percentage allocation for each
+  stock. Return ONLY the JSON object.
+
+# ---------------------------------------------------------------------------
+# Strategy-specific instructions — one key per strategy.
+# allocation_decider.py reads state["strategy"], prepends "strategy_" to it,
+# and looks up the matching key here to inject into the {strategy_instruction}
+# placeholder in the user prompt above.
+# ---------------------------------------------------------------------------
+
+strategy_conservative: |
+  STRATEGY: Conservative — Capital Preservation.
+  Your primary objective is to protect the portfolio from loss. Apply the following rules strictly:
+  - Heavily favour stocks with low beta (< 0.8), strong balance sheets, and consistent earnings.
+  - Avoid any stock with high short interest, recent earnings misses, or elevated debt-to-equity.
+  - No single stock should exceed 40% of the portfolio.
+  - If the VIX is above 25, reduce exposure to any high-volatility holding further and concentrate
+    weight in the most defensive name available.
+  - Sacrifice upside potential entirely in favour of minimising drawdown risk.
+
+strategy_balanced: |
+  STRATEGY: Balanced — Growth with Stability.
+  Your objective is to balance long-term capital appreciation with downside protection.
+  Apply the following rules:
+  - Mix growth stocks (higher beta, strong revenue trajectory) with defensive names.
+  - No single stock should exceed 45% of the portfolio.
+  - If the 10-year Treasury yield is above 4.5%, tilt slightly toward value and dividend names
+    over pure-growth plays, as higher yields compress growth multiples.
+  - Aim for diversification across sectors where the research supports it.
+  - Accept moderate volatility in exchange for above-average long-term returns.
+
+strategy_aggressive: |
+  STRATEGY: Aggressive — Maximum Growth.
+  Your objective is to maximise total return. Accept high short-term volatility without hesitation.
+  Apply the following rules:
+  - Concentrate weight into the stock(s) with the strongest momentum, revenue growth, and
+    expanding addressable market, even if it means one position exceeds 50% of the portfolio.
+  - Underweight or eliminate defensive, low-growth names unless the research shows a near-term
+    catalyst that justifies inclusion.
+  - If SPY is in a strong uptrend (price above recent highs) lean into the highest-beta names.
+  - If VIX is above 30, you may still hold aggressive positions — do not de-risk; volatility is
+    the price paid for outsized returns.
+
+strategy_income: |
+  STRATEGY: Income — Dividend and Yield Focus.
+  Your objective is to maximise reliable income generation from the portfolio.
+  Apply the following rules:
+  - Strongly favour stocks with a documented history of consistent and growing dividends.
+  - Penalise stocks that pay no dividend or have cut their dividend in the past two years —
+    they should receive a materially lower weight or be excluded entirely if alternatives exist.
+  - If the 10-year Treasury yield is above 4%, ensure at least one holding offers a dividend
+    yield that is competitive with or exceeds the risk-free rate.
+  - No single stock should exceed 40% to preserve income diversification.
+  - Stability of the dividend matters more than the size of the yield — prefer a reliable 3%
+    payer over an unstable 7% payer.

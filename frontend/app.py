@@ -53,6 +53,44 @@ st.markdown(
 st.divider()
 
 # ---------------------------------------------------------------------------
+# Strategy selector
+# ---------------------------------------------------------------------------
+# Maps the human-readable label shown in the dropdown to the snake_case key
+# expected by the YAML file and the state schema.  A dict preserves insertion
+# order (Python 3.7+), so the options appear in this exact order in the UI.
+_STRATEGY_OPTIONS: dict[str, str] = {
+    "Conservative — Capital Preservation": "conservative",
+    "Balanced — Growth with Stability":    "balanced",
+    "Aggressive — Maximum Growth":         "aggressive",
+    "Income — Dividend & Yield Focus":     "income",
+}
+
+# st.selectbox() renders a dropdown menu.
+# The first argument is the label displayed above the widget.
+# `options` receives the human-readable keys of the dict as the list of choices.
+# The widget returns the selected label string on every script rerun.
+selected_label = st.selectbox(
+    "Investment Strategy",
+    options=list(_STRATEGY_OPTIONS.keys()),
+)
+
+# st.caption() displays small muted helper text directly below the dropdown,
+# giving the user a one-line reminder of what the selected strategy means
+# without cluttering the main layout.
+_STRATEGY_CAPTIONS: dict[str, str] = {
+    "conservative": "Prioritises capital preservation and low volatility.",
+    "balanced":     "Mixes growth and stability across the portfolio.",
+    "aggressive":   "Maximises returns; accepts high short-term volatility.",
+    "income":       "Focuses on dividend-paying, stable income stocks.",
+}
+
+# Look up the internal key for the selected label, then show its caption.
+# _STRATEGY_OPTIONS[selected_label] converts e.g. "Balanced — Growth with
+# Stability" → "balanced" so we can look up the matching caption string.
+selected_strategy = _STRATEGY_OPTIONS[selected_label]
+st.caption(_STRATEGY_CAPTIONS[selected_strategy])
+
+# ---------------------------------------------------------------------------
 # Trigger button
 # ---------------------------------------------------------------------------
 # st.button() renders a clickable button and returns True on the frame where
@@ -66,11 +104,12 @@ if st.button("▶ Run Agent", type="primary", use_container_width=True):
     # finishes (success or exception).
     with st.spinner("Agent is running — researching tickers and deciding allocations…"):
         try:
-            # graph.invoke() runs the full LangGraph pipeline synchronously:
-            # portfolio_loader → research_loop (×N) → allocation_decider → output_formatter.
-            # The empty dict {} is the initial state override; all required
-            # fields are populated by portfolio_loader at the start of the run.
-            result = graph.invoke({})
+            # Pass the selected strategy into the graph as part of the initial
+            # state dict.  LangGraph merges this with any defaults so
+            # allocation_decider can read state["strategy"] directly.
+            # Every other field (tickers, macro_context, etc.) is populated
+            # by the nodes themselves during the run.
+            result = graph.invoke({"strategy": selected_strategy})
 
             # result is the final PortfolioState dict after all nodes have run.
             # "final_output" is the markdown string written by output_formatter.

@@ -1,6 +1,6 @@
 # Defines the shared state schema passed between all nodes in the LangGraph portfolio agent.
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, TypedDict
 import operator
 
 
@@ -12,6 +12,13 @@ class PortfolioState(TypedDict):
     # List of stock ticker symbols the user wants to analyse, e.g. ["AAPL", "NVDA", "TSLA"].
     # This is the primary input to the graph and never changes during a run.
     tickers: list[str]
+
+    # The investment strategy selected by the user before running the graph.
+    # Must be one of: "conservative", "balanced", "aggressive", "income".
+    # Passed in via graph.invoke({"strategy": "balanced"}) from the frontend.
+    # allocation_decider reads this to pick the matching strategy prompt section
+    # from prompts/allocation_decider.yaml.
+    strategy: str
 
     # -------------------------------------------------------------------------
     # LOOP CONTROL — tracks which stock is currently being researched
