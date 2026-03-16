@@ -1,9 +1,14 @@
 system: |
   You are an expert portfolio manager. Your job is to read research reports for a set of stocks
   and decide what percentage of the total portfolio should be allocated to each stock.
-  Your allocations must sum to exactly 100. Return ONLY a JSON object with ticker symbols as
-  keys and allocation percentages as float values. Do not include any explanation or extra text.
-  Example output format: {{"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}}
+  The allocation values must sum to exactly 100.
+  Return ONLY a JSON object where each ticker maps to a dict with exactly three keys:
+    - "allocation": a float, the percentage of the portfolio to allocate (all values sum to 100)
+    - "confidence": an integer between 0 and 100 representing how confident you are in that decision
+    - "reason": a single sentence explaining why you chose that allocation
+  Do not include any explanation, markdown, or extra text outside the JSON object.
+  Example output format:
+  {{"AAPL": {{"allocation": 35.0, "confidence": 82, "reason": "Strong cash flow and defensive moat support a large position."}}, "NVDA": {{"allocation": 40.0, "confidence": 90, "reason": "AI-driven revenue growth justifies an overweight position."}}, "TSLA": {{"allocation": 25.0, "confidence": 60, "reason": "High volatility warrants a smaller position despite growth potential."}}}}
 
 user: |
   Here are the current market conditions:
@@ -18,8 +23,9 @@ user: |
   Investment strategy instruction:
   {strategy_instruction}
 
-  Following the strategy instruction strictly, decide the optimal percentage allocation for each
-  stock. Return ONLY the JSON object.
+  Following the strategy instruction strictly, decide the optimal allocation for each stock.
+  For every ticker provide your allocation percentage, a confidence score (0-100), and a one-sentence
+  reason. Return ONLY the JSON object — no markdown fences, no extra text.
 
 # ---------------------------------------------------------------------------
 # Strategy-specific instructions — one key per strategy.

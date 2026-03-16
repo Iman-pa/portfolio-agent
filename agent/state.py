@@ -52,10 +52,13 @@ class PortfolioState(TypedDict):
     # ALLOCATION OUTPUT — produced once all research is complete
     # -------------------------------------------------------------------------
 
-    # Maps every ticker to the recommended allocation percentage decided by the
-    # allocation node, e.g. {"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}.
-    # Percentages must sum to 100 across all tickers.
-    allocations: dict[str, float]
+    # Maps every ticker to a richer allocation dict produced by allocation_decider.
+    # Each inner dict has three keys:
+    #   "allocation"  — float, percentage of the portfolio (all values sum to 100)
+    #   "confidence"  — int 0-100, how confident the LLM is in its decision
+    #   "reason"      — str, one sentence explaining the allocation choice
+    # Example: {"AAPL": {"allocation": 35.0, "confidence": 82, "reason": "..."}}
+    allocations: dict[str, dict]
 
     # -------------------------------------------------------------------------
     # FINAL OUTPUT — produced by output_formatter, consumed by the UI

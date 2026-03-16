@@ -1,81 +1,127 @@
 from agent.state import PortfolioState
 
-# A simple bar made of Unicode block characters.  Each filled block (█)
-# represents 2 percentage points, giving a maximum bar width of 50 chars
-# for a 100 % allocation.  Stored as a module constant so the magic number
-# is named and lives in one place.
-_BAR_UNIT = 2  # percentage points represented by one █ character
+# Each filled block represents 2 percentage points.
+# A 100 % allocation therefore spans exactly 50 blocks.
+_BAR_UNIT = 2
 
 
 def _make_bar(percentage: float) -> str:
-    """Return a small ASCII progress bar for a single allocation percentage.
+    """Return a fixed-width ASCII progress bar for an allocation percentage.
 
     Example: _make_bar(40.0) → "████████████████████░░░░░░░░░░  40.0%"
+    The bar is always 50 characters wide so all tickers align vertically.
     """
-    # How many filled blocks to draw.  int() truncates — intentional, since
-    # we want a conservative visual rather than rounding up.
+    # int() truncates — we never want the bar to visually exceed the percentage.
     filled = int(percentage / _BAR_UNIT)
 
-    # The remainder of the bar is shown as light shade (░) so the total
-    # bar width is always the same regardless of the percentage value.
+    # Pad the remainder with light-shade blocks to keep constant total width.
     empty = (100 // _BAR_UNIT) - filled
 
-    # Concatenate filled blocks, empty blocks, and the numeric label.
-    # The label is right-aligned in a 6-character field (.6) so all
-    # percentages line up vertically even when the integer part differs.
+    # :5.1f formats the float as " 40.0" — one decimal place, right-aligned in
+    # a 5-character field — so single- and double-digit values line up cleanly.
     return f"{'█' * filled}{'░' * empty}  {percentage:5.1f}%"
 
 
-def output_formatter(state: PortfolioState) -> dict:
-    """Format the final allocations into a markdown string for Streamlit.
+def _confidence_badge(confidence: int) -> str:
+    """Return a short markdown label that colours the confidence score.
 
-    Reads `state["allocations"]` (and optionally `state["tickers"]` for
-    ordering) and writes a fully rendered markdown report to `final_output`.
-    Streamlit's `st.markdown()` can render this directly.
+    Streamlit does not support arbitrary CSS in plain markdown, so we use
+    emoji as a lightweight visual signal that requires no custom styling:
+      🟢  high confidence  (>= 75)
+      🟡  medium confidence (>= 50)
+      🔴  low confidence   (< 50)
+    The numeric value is shown alongside so the exact score is never hidden.
     """
-    allocations: dict[str, float] = state["allocations"]
+    if confidence >= 75:
+        # High confidence — green circle emoji.
+        icon = "🟢"
+    elif confidence >= 50:
+        # Medium confidence — yellow circle emoji.
+        icon = "🟡"
+    else:
+        # Low confidence — red circle emoji.
+        icon = "🔴"
 
-    # Sort tickers from highest to lowest allocation so the most significant
-    # positions appear at the top of the report.  sorted() returns a new list
-    # and does not mutate the original dict.
-    sorted_tickers = sorted(allocations, key=lambda t: allocations[t], reverse=True)
+    # The result is a short inline string like "🟢 Confidence: 82/100".
+    # It will be placed on the same line as the ticker heading.
+    return f"{icon} Confidence: {confidence}/100"
 
-    # ── Header ──────────────────────────────────────────────────────────────
-    # Markdown H2 heading.  The horizontal rule (---) below it adds a visible
-    # separator when rendered by Streamlit.
+
+def output_formatter(state: PortfolioState) -> dict:
+    """Format the richer allocation dicts into a markdown string for Streamlit.
+
+    Each ticker's allocation dict contains:
+        "allocation"  — float percentage
+        "confidence"  — int 0-100
+        "reason"      — one-sentence string
+
+    The final output renders:
+        TICKER    🟢 Confidence: 82/100
+        [bar]
+        > reason sentence
+    """
+    # state["allocations"] is now dict[str, dict], e.g.:
+    # {"AAPL": {"allocation": 35.0, "confidence": 82, "reason": "..."}, ...}
+    allocations: dict[str, dict] = state["allocations"]
+
+    # Sort tickers by allocation percentage, highest first, so the largest
+    # positions appear at the top of the report.
+    # The lambda extracts the "allocation" float from each inner dict for
+    # comparison — sorted() never sees the outer ticker key.
+    sorted_tickers = sorted(
+        allocations,
+        key=lambda t: allocations[t]["allocation"],
+        reverse=True,
+    )
+
+    # ── Header ───────────────────────────────────────────────────────────────
     lines = [
         "## Portfolio Allocation Report",
         "---",
         "",
     ]
 
-    # ── Per-ticker rows ──────────────────────────────────────────────────────
+    # ── Per-ticker rows ───────────────────────────────────────────────────────
     for ticker in sorted_tickers:
-        pct = allocations[ticker]
+        # Unpack the three keys from the inner dict.
+        # We use explicit key access rather than .get() because all three keys
+        # are guaranteed by the prompt — missing keys should raise immediately.
+        pct: float = allocations[ticker]["allocation"]
+        confidence: int = allocations[ticker]["confidence"]
+        reason: str = allocations[ticker]["reason"]
 
-        # Bold ticker symbol, followed by a code-fenced bar so Streamlit
-        # renders it in a monospace font (important for bar alignment).
-        lines.append(f"**{ticker}**")
-        lines.append(f"```")
+        # Header line: bold ticker on the left, confidence badge on the right,
+        # separated by four non-breaking spaces for visual spacing.
+        # The &nbsp; trick does not work in st.markdown — plain spaces inside
+        # a bold span collapse, so we use a dash separator instead.
+        lines.append(f"**{ticker}** — {_confidence_badge(confidence)}")
+
+        # Fenced code block forces monospace rendering so the bar characters
+        # align correctly.  Without this, proportional fonts misalign █ and ░.
+        lines.append("```")
         lines.append(_make_bar(pct))
-        lines.append(f"```")
-        # Blank line between tickers for visual breathing room.
+        lines.append("```")
+
+        # Blockquote ("> ") renders as an indented, visually distinct paragraph
+        # in Streamlit markdown — ideal for the one-sentence reason.
+        lines.append(f"> {reason}")
+
+        # Blank line gives breathing room between tickers.
         lines.append("")
 
-    # ── Summary footer ───────────────────────────────────────────────────────
+    # ── Summary footer ────────────────────────────────────────────────────────
     lines.append("---")
 
-    # Sum the allocation values to show a total.  round() avoids floating-
-    # point noise like 99.999999 when the values came from division.
-    total = round(sum(allocations.values()), 2)
+    # Sum only the "allocation" floats from each inner dict.
+    # round() eliminates floating-point noise (e.g. 99.99999 → 100.0).
+    total = round(sum(v["allocation"] for v in allocations.values()), 2)
 
-    # Inline code block (`...`) renders as monospace in Streamlit markdown.
+    # Inline code renders as monospace so the percentage stands out.
     lines.append(f"**Total allocated:** `{total}%`")
 
-    # ── Join and store ───────────────────────────────────────────────────────
-    # "\n".join() collapses the list into a single newline-delimited string.
-    # This is what Streamlit's st.markdown() will receive.
+    # ── Join and return ───────────────────────────────────────────────────────
+    # "\n".join() collapses the list into one newline-delimited string.
+    # st.markdown(result["final_output"]) in app.py renders this directly.
     final_output = "\n".join(lines)
 
-    # Return only the field this node writes.  LangGraph merges it into state.
     return {"final_output": final_output}

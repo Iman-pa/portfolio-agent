@@ -103,12 +103,20 @@ def _get_strategy_instruction(raw: dict, strategy: str) -> str:
     return raw[yaml_key]
 
 
-def _parse_allocations(raw_text: str) -> dict[str, float]:
-    """Parse the model's JSON response string into a Python dict.
+def _parse_allocations(raw_text: str) -> dict[str, dict]:
+    """Parse the model's richer JSON response string into a Python dict.
+
+    The expected structure is:
+        {
+            "AAPL": {"allocation": 35.0, "confidence": 82, "reason": "..."},
+            "NVDA": {"allocation": 40.0, "confidence": 90, "reason": "..."},
+        }
 
     .strip() removes any leading/trailing whitespace the model may have added.
     json.loads() raises JSONDecodeError on malformed output, which propagates
     to the Streamlit error handler rather than silently returning bad data.
+    The parsed dict is returned as-is — each value is already a dict with the
+    three required keys, so no further transformation is needed here.
     """
     return json.loads(raw_text.strip())
 
