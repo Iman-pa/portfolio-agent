@@ -109,7 +109,7 @@ def output_formatter(state: PortfolioState) -> dict:
         # Blank line gives breathing room between tickers.
         lines.append("")
 
-    # ── Summary footer ────────────────────────────────────────────────────────
+    # ── Allocation summary ────────────────────────────────────────────────────
     lines.append("---")
 
     # Sum only the "allocation" floats from each inner dict.
@@ -118,6 +118,54 @@ def output_formatter(state: PortfolioState) -> dict:
 
     # Inline code renders as monospace so the percentage stands out.
     lines.append(f"**Total allocated:** `{total}%`")
+
+    # ── Portfolio metrics section ─────────────────────────────────────────────
+    # Blank line before the new section header for visual separation.
+    lines.append("")
+    lines.append("## Portfolio Metrics (1-Year Historical)")
+    lines.append("---")
+    lines.append("")
+
+    # Read the metrics dict written by portfolio_metrics into state.
+    # All three keys are guaranteed to exist — the node always writes all of them.
+    metrics: dict[str, float] = state["portfolio_metrics"]
+
+    # ── Expected return ───────────────────────────────────────────────────────
+    # The stored value is a decimal fraction (e.g. 0.142).
+    # Multiplying by 100 converts it to a percentage (14.2) for display.
+    expected_pct = metrics["expected_return"] * 100
+
+    # ▲ for positive return, ▼ for negative — gives an instant directional read.
+    er_arrow = "▲" if expected_pct >= 0 else "▼"
+
+    # :.2f formats to exactly two decimal places — standard in finance reports.
+    lines.append(f"**Expected Annual Return:** {er_arrow} `{expected_pct:.2f}%`")
+
+    lines.append("")
+
+    # ── Max drawdown ──────────────────────────────────────────────────────────
+    # The stored value is already negative (e.g. -0.183 = worst loss of 18.3%).
+    # abs() removes the sign so we can prefix "−" ourselves, making the label
+    # read as "−18.30%" — unambiguous regardless of display font.
+    drawdown_pct = abs(metrics["max_drawdown"] * 100)
+    lines.append(f"**Max Drawdown (1Y):** `−{drawdown_pct:.2f}%`")
+
+    lines.append("")
+
+    # ── Sharpe ratio ──────────────────────────────────────────────────────────
+    sharpe = metrics["sharpe_ratio"]
+
+    # Colour-code with emoji: green ≥ 1.0 (good), yellow ≥ 0.5 (acceptable),
+    # red < 0.5 (poor).  Finance convention: Sharpe > 1 is generally desirable.
+    if sharpe >= 1.0:
+        sharpe_icon = "🟢"
+    elif sharpe >= 0.5:
+        sharpe_icon = "🟡"
+    else:
+        sharpe_icon = "🔴"
+
+    # :.2f is the conventional precision for Sharpe ratios in professional reports.
+    lines.append(f"**Sharpe Ratio:** {sharpe_icon} `{sharpe:.2f}`")
 
     # ── Join and return ───────────────────────────────────────────────────────
     # "\n".join() collapses the list into one newline-delimited string.

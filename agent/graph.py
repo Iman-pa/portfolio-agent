@@ -20,6 +20,7 @@ from agent.nodes.portfolio_loader import portfolio_loader
 from agent.nodes.macro_fetcher import macro_fetcher
 from agent.nodes.research_loop import research_loop
 from agent.nodes.allocation_decider import allocation_decider
+from agent.nodes.portfolio_metrics import portfolio_metrics
 from agent.nodes.output_formatter import output_formatter
 
 
@@ -60,6 +61,7 @@ graph_builder.add_node("portfolio_loader",   portfolio_loader)
 graph_builder.add_node("macro_fetcher",      macro_fetcher)
 graph_builder.add_node("research_loop",      research_loop)
 graph_builder.add_node("allocation_decider", allocation_decider)
+graph_builder.add_node("portfolio_metrics",  portfolio_metrics)
 graph_builder.add_node("output_formatter",   output_formatter)
 
 # LINE 54: Declare the entry point.  LangGraph will call `portfolio_loader`
@@ -88,9 +90,13 @@ graph_builder.add_conditional_edges(
     },
 )
 
-# LINE 73: Unconditional edge — once allocations are decided, always run the
-# formatter to produce the final output.
-graph_builder.add_edge("allocation_decider", "output_formatter")
+# Unconditional edge — once allocations are decided, compute portfolio metrics
+# before formatting.  This gives output_formatter access to all three numbers.
+graph_builder.add_edge("allocation_decider", "portfolio_metrics")
+
+# Unconditional edge — after metrics are computed, run the formatter to
+# produce the final markdown output that Streamlit will render.
+graph_builder.add_edge("portfolio_metrics", "output_formatter")
 
 # LINE 77: Unconditional edge to the special END sentinel.  Reaching END
 # tells LangGraph the run is complete and `.invoke()` should return.

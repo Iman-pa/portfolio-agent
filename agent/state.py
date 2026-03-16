@@ -61,6 +61,18 @@ class PortfolioState(TypedDict):
     allocations: dict[str, dict]
 
     # -------------------------------------------------------------------------
+    # PORTFOLIO METRICS — computed from historical prices after allocation
+    # -------------------------------------------------------------------------
+
+    # Quantitative metrics for the recommended portfolio, computed by
+    # portfolio_metrics using 1 year of yfinance price history.
+    # Keys:
+    #   "expected_return"  — float, annualised weighted return (e.g. 0.142 = 14.2%)
+    #   "max_drawdown"     — float, worst peak-to-trough loss (e.g. -0.183 = -18.3%)
+    #   "sharpe_ratio"     — float, annualised excess return per unit of volatility
+    portfolio_metrics: dict[str, float]
+
+    # -------------------------------------------------------------------------
     # FINAL OUTPUT — produced by output_formatter, consumed by the UI
     # -------------------------------------------------------------------------
 
