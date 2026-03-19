@@ -6,6 +6,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import PortfolioState
+from dotenv import load_dotenv
+load_dotenv()
 
 # Resolve the path to the YAML prompt file relative to this file's location.
 # __file__ is allocation_decider.py inside agent/nodes/.
