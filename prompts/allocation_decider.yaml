@@ -16,6 +16,9 @@ user: |
   - 10-Year Treasury Yield: {yield_10y}%
   - SPY (S&P 500 ETF price): ${spy_price}
 
+  Here is the correlation analysis between the stocks in the portfolio (based on 90 days of price history):
+  {correlation_context}
+
   Here are the research reports for each stock in the portfolio:
 
   {research_results}

@@ -39,6 +39,26 @@ class PortfolioState(TypedDict):
     macro_context: dict[str, float]
 
     # -------------------------------------------------------------------------
+    # CORRELATION CONTEXT — computed once after macro data is fetched
+    # -------------------------------------------------------------------------
+
+    # Pairwise return correlations for all holdings computed by
+    # correlation_analyzer using 90 days of daily closing prices from yfinance.
+    # The dict always has exactly three keys:
+    #   "high_pairs"       — list of [ticker_a, ticker_b] pairs whose Pearson
+    #                        correlation is above 0.7; these stocks tend to rise
+    #                        and fall together, concentrating risk.
+    #   "low_pairs"        — list of [ticker_a, ticker_b] pairs whose Pearson
+    #                        correlation is below 0.3; these stocks move
+    #                        independently, improving diversification.
+    #   "avg_correlation"  — float, the arithmetic mean of all unique pairwise
+    #                        correlations (upper triangle of the matrix, no
+    #                        diagonal), rounded to 4 decimal places.
+    # Example:
+    #   {"high_pairs": [["AAPL","NVDA"]], "low_pairs": [], "avg_correlation": 0.72}
+    correlation_context: dict
+
+    # -------------------------------------------------------------------------
     # RESEARCH ACCUMULATOR — grows as each stock is researched
     # -------------------------------------------------------------------------
 

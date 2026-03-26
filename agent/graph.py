@@ -18,6 +18,7 @@ from agent.state import PortfolioState
 # fields it needs from state and returns only the fields it changes.
 from agent.nodes.portfolio_loader import portfolio_loader
 from agent.nodes.macro_fetcher import macro_fetcher
+from agent.nodes.correlation_analyzer import correlation_analyzer  # NEW: sits between macro_fetcher and research_loop
 from agent.nodes.research_loop import research_loop
 from agent.nodes.allocation_decider import allocation_decider
 from agent.nodes.portfolio_metrics import portfolio_metrics
@@ -57,12 +58,13 @@ graph_builder = StateGraph(PortfolioState)
 
 # LINE 48-51: Register each node.  The first argument is the *name* used in
 # edge declarations; the second is the Python callable that implements it.
-graph_builder.add_node("portfolio_loader",   portfolio_loader)
-graph_builder.add_node("macro_fetcher",      macro_fetcher)
-graph_builder.add_node("research_loop",      research_loop)
-graph_builder.add_node("allocation_decider", allocation_decider)
-graph_builder.add_node("portfolio_metrics",  portfolio_metrics)
-graph_builder.add_node("output_formatter",   output_formatter)
+graph_builder.add_node("portfolio_loader",    portfolio_loader)
+graph_builder.add_node("macro_fetcher",       macro_fetcher)
+graph_builder.add_node("correlation_analyzer", correlation_analyzer)  # NEW node registered here
+graph_builder.add_node("research_loop",       research_loop)
+graph_builder.add_node("allocation_decider",  allocation_decider)
+graph_builder.add_node("portfolio_metrics",   portfolio_metrics)
+graph_builder.add_node("output_formatter",    output_formatter)
 
 # LINE 54: Declare the entry point.  LangGraph will call `portfolio_loader`
 # first when `.invoke()` is called on the compiled graph.
@@ -72,9 +74,13 @@ graph_builder.set_entry_point("portfolio_loader")
 # `macro_fetcher` to collect market-wide context before research begins.
 graph_builder.add_edge("portfolio_loader", "macro_fetcher")
 
-# Unconditional edge — after `macro_fetcher` finishes, move straight to
-# `research_loop`.  macro_context is now available in state for all nodes.
-graph_builder.add_edge("macro_fetcher", "research_loop")
+# Unconditional edge — after `macro_fetcher` finishes, move to
+# `correlation_analyzer` to compute pairwise correlations before research begins.
+graph_builder.add_edge("macro_fetcher", "correlation_analyzer")
+
+# Unconditional edge — after `correlation_analyzer` finishes, move to
+# `research_loop`.  correlation_context is now in state for all downstream nodes.
+graph_builder.add_edge("correlation_analyzer", "research_loop")
 
 # LINE 62-70: Conditional edge — after `research_loop` finishes, call
 # `should_continue_research` with the current state.  The returned string is
