@@ -167,6 +167,103 @@ def output_formatter(state: PortfolioState) -> dict:
     # :.2f is the conventional precision for Sharpe ratios in professional reports.
     lines.append(f"**Sharpe Ratio:** {sharpe_icon} `{sharpe:.2f}`")
 
+    lines.append("")
+
+    # ── Volatility ────────────────────────────────────────────────────────────
+    # The stored value is a decimal (e.g. 0.182).  Multiplying by 100 converts
+    # it to a percentage (18.2%) which is the standard display format.
+    vol_pct = metrics["volatility"] * 100
+
+    # Thresholds: < 15% is low volatility (green), 15-25% is moderate (yellow),
+    # > 25% is high (red).  These are loose industry conventions for diversified
+    # equity portfolios; individual stocks would warrant higher thresholds.
+    if vol_pct < 15:
+        vol_icon = "🟢"
+    elif vol_pct < 25:
+        vol_icon = "🟡"
+    else:
+        vol_icon = "🔴"
+
+    lines.append(f"**Annualised Volatility:** {vol_icon} `{vol_pct:.2f}%`")
+
+    lines.append("")
+
+    # ── Beta ──────────────────────────────────────────────────────────────────
+    # Beta is already a dimensionless ratio — no unit conversion needed.
+    beta = metrics["beta"]
+
+    # < 1.0 means the portfolio is less sensitive to market swings than SPY (green).
+    # 1.0–1.5 means moderate amplification of market moves (yellow).
+    # > 1.5 means the portfolio swings significantly more than the market (red).
+    if beta < 1.0:
+        beta_icon = "🟢"
+    elif beta < 1.5:
+        beta_icon = "🟡"
+    else:
+        beta_icon = "🔴"
+
+    lines.append(f"**Beta (vs SPY):** {beta_icon} `{beta:.2f}`")
+
+    lines.append("")
+
+    # ── VaR 95% ───────────────────────────────────────────────────────────────
+    # The stored value is the 5th-percentile daily return — a negative number,
+    # e.g. -0.023.  We take abs() and multiply by 100 to get a positive
+    # percentage (2.3%) and then prefix "−" so it reads as an explicit loss.
+    var_pct = abs(metrics["var_95"] * 100)
+
+    # < 1.5% worst-day loss is low risk (green), 1.5–2.5% is moderate (yellow),
+    # > 2.5% means the portfolio has a fat left tail / high daily loss risk (red).
+    if var_pct < 1.5:
+        var_icon = "🟢"
+    elif var_pct < 2.5:
+        var_icon = "🟡"
+    else:
+        var_icon = "🔴"
+
+    lines.append(f"**VaR 95% (1-Day):** {var_icon} `−{var_pct:.2f}%`")
+
+    lines.append("")
+
+    # ── Sortino ratio ─────────────────────────────────────────────────────────
+    sortino = metrics["sortino_ratio"]
+
+    # Same colour thresholds as Sharpe — both are risk-adjusted return ratios.
+    # Sortino is typically higher than Sharpe for the same portfolio because
+    # it only penalises downside volatility, not total volatility.
+    if sortino >= 1.0:
+        sortino_icon = "🟢"
+    elif sortino >= 0.5:
+        sortino_icon = "🟡"
+    else:
+        sortino_icon = "🔴"
+
+    # A value of 0.0 means there were no negative return days in the period —
+    # technically not poor performance, but we display the number as-is and let
+    # the colour coding convey that it signals missing data rather than bad risk.
+    lines.append(f"**Sortino Ratio:** {sortino_icon} `{sortino:.2f}`")
+
+    lines.append("")
+
+    # ── Concentration risk (HHI) ──────────────────────────────────────────────
+    hhi = metrics["concentration_risk"]
+
+    # HHI ranges from 1/N (perfectly equal-weight) to 1.0 (single stock).
+    # < 0.25 means the allocation weight is reasonably spread out (green).
+    # 0.25–0.40 means moderate concentration — a few large positions (yellow).
+    # > 0.40 means one or two names dominate the portfolio heavily (red).
+    if hhi < 0.25:
+        hhi_icon = "🟢"
+    elif hhi < 0.40:
+        hhi_icon = "🟡"
+    else:
+        hhi_icon = "🔴"
+
+    # Display HHI as a raw decimal to 4 places — unlike return metrics it is
+    # not a percentage, and rounding to 2 places would hide meaningful variation
+    # (e.g. 0.2500 vs 0.2499 straddle the green/yellow threshold).
+    lines.append(f"**Concentration Risk (HHI):** {hhi_icon} `{hhi:.4f}`")
+
     # ── Join and return ───────────────────────────────────────────────────────
     # "\n".join() collapses the list into one newline-delimited string.
     # st.markdown(result["final_output"]) in app.py renders this directly.
