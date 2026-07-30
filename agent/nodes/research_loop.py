@@ -7,8 +7,21 @@ def _call_deep_research(ticker: str) -> str:
     Returns a plain string report for the given ticker.
     Replace the body of this function with the real API call when ready —
     the rest of the node does not need to change.
+
+    This demo deployment doesn't wire up a real multi-source research
+    pipeline, so the report explicitly invites the model to draw on its own
+    general knowledge of the company rather than pretending fabricated
+    figures came from a live research call — this keeps the downstream
+    allocation reasoning grounded instead of citing a report that doesn't
+    exist.
     """
-    return f"Research report for {ticker}: This is a placeholder report."
+    return (
+        f"Condensed research note for {ticker} (demo mode: this deployment "
+        "does not call a live multi-source research pipeline). Use your own "
+        f"general knowledge of {ticker} — business model, sector, recent "
+        "trends, and risk profile — together with the market and "
+        "correlation context provided separately to inform this decision."
+    )
 
 
 def research_loop(state: PortfolioState) -> dict:

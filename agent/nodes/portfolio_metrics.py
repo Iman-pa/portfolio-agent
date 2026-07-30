@@ -4,6 +4,7 @@ import pandas as pd
 import yfinance as yf
 
 from agent.state import PortfolioState
+from security.errors import PortfolioAgentError
 
 # Number of trading days in a calendar year.  This constant converts daily
 # statistics into annualised ones.  252 is the market standard — the NYSE
@@ -22,9 +23,22 @@ def _fetch_daily_returns(ticker: str) -> pd.Series:
     # yf.Ticker() creates a lazy handle — no network request yet.
     ticker_obj = yf.Ticker(ticker)
 
-    # .history() fetches OHLCV data.  period="1y" requests the last 52 weeks
-    # of trading sessions.  Only the "Close" column is needed for returns.
-    hist = ticker_obj.history(period="1y")
+    try:
+        # .history() fetches OHLCV data.  period="1y" requests the last 52 weeks
+        # of trading sessions.  Only the "Close" column is needed for returns.
+        hist = ticker_obj.history(period="1y")
+    except Exception as exc:
+        raise PortfolioAgentError(
+            "We couldn't fetch market data right now. This is usually a "
+            "temporary issue with the data provider — please try again in "
+            "a minute."
+        ) from exc
+
+    if hist.empty:
+        raise PortfolioAgentError(
+            f"We couldn't find market data for '{ticker}'. Please check "
+            "the ticker symbol and try again."
+        )
 
     # hist["Close"] is a Series of daily closing prices indexed by datetime.
     # .pct_change() computes (value_t - value_{t-1}) / value_{t-1} for each row,

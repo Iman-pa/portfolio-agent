@@ -23,6 +23,11 @@ import yfinance as yf
 from agent.state import PortfolioState
 # Import the shared TypedDict so type checkers and IDEs know the shape of state.
 
+from security.errors import PortfolioAgentError
+# Friendly exception type — the Streamlit UI catches this to show a clean
+# error state instead of a raw traceback when a ticker is invalid or Yahoo
+# Finance has no data for it.
+
 
 def correlation_analyzer(state: PortfolioState) -> dict:
     """Compute pairwise return correlations for every ticker in the portfolio.
@@ -55,26 +60,42 @@ def correlation_analyzer(state: PortfolioState) -> dict:
     # -----------------------------------------------------------------------
     # STEP 3 — Download adjusted daily closing prices for all tickers at once.
     # -----------------------------------------------------------------------
-    raw = yf.download(
-        tickers=tickers,
-        # Pass the full list — yfinance fetches all tickers in a single HTTP
-        # request, which is faster and rate-limit-friendlier than one call per ticker.
-        start=start_date,
-        # Inclusive start date for the price series.
-        end=end_date,
-        # End date is exclusive in yfinance — it returns data *up to but not
-        # including* this date, so today's partial candle is excluded automatically.
-        auto_adjust=True,
-        # Replace raw OHLCV with adjusted values that account for stock splits
-        # and dividends.  This is important for correlation: a nominal split
-        # creates a sudden price drop that would skew the correlation if unadjusted.
-        progress=False,
-        # Suppress yfinance's tqdm download-progress bar so it doesn't pollute
-        # the server logs or Streamlit output.
-    )
+    try:
+        raw = yf.download(
+            tickers=tickers,
+            # Pass the full list — yfinance fetches all tickers in a single HTTP
+            # request, which is faster and rate-limit-friendlier than one call per ticker.
+            start=start_date,
+            # Inclusive start date for the price series.
+            end=end_date,
+            # End date is exclusive in yfinance — it returns data *up to but not
+            # including* this date, so today's partial candle is excluded automatically.
+            auto_adjust=True,
+            # Replace raw OHLCV with adjusted values that account for stock splits
+            # and dividends.  This is important for correlation: a nominal split
+            # creates a sudden price drop that would skew the correlation if unadjusted.
+            progress=False,
+            # Suppress yfinance's tqdm download-progress bar so it doesn't pollute
+            # the server logs or Streamlit output.
+        )
+    except Exception as exc:
+        # Network hiccups or Yahoo Finance outages surface here as arbitrary
+        # exceptions from the underlying HTTP client — wrap them in a message
+        # that's safe to show to a site visitor.
+        raise PortfolioAgentError(
+            "We couldn't fetch market data right now. This is usually a "
+            "temporary issue with the data provider — please try again in "
+            "a minute."
+        ) from exc
     # `raw` is a pandas DataFrame.  When multiple tickers are requested, the
     # columns are a two-level MultiIndex: (field, ticker).
     # Example columns: ("Close","AAPL"), ("Close","NVDA"), ("Open","AAPL"), ...
+
+    if raw.empty:
+        raise PortfolioAgentError(
+            "We couldn't find market data for any of the tickers you "
+            "entered. Please check the symbols and try again."
+        )
 
     # -----------------------------------------------------------------------
     # STEP 4 — Isolate the "Close" column for each ticker.
@@ -92,6 +113,18 @@ def correlation_analyzer(state: PortfolioState) -> dict:
         prices = prices.to_frame(name=tickers[0])
         # to_frame() wraps the Series in a DataFrame; name= sets the column label
         # to the ticker symbol so corr_matrix.loc[t1, t2] still works by name.
+
+    # Any ticker yfinance couldn't resolve comes back as an all-NaN column.
+    # Surface exactly which symbol is bad rather than silently dropping it
+    # (dropna() below would otherwise wipe out every row if even one column
+    # is entirely NaN, producing a confusing "no data" error later).
+    missing_tickers = [t for t in prices.columns if prices[t].isna().all()]
+    if missing_tickers:
+        raise PortfolioAgentError(
+            "We couldn't find market data for: "
+            f"{', '.join(missing_tickers)}. Please check the ticker "
+            "symbol(s) and try again."
+        )
 
     prices = prices.dropna()
     # Drop any row (trading day) where at least one ticker has a missing value.

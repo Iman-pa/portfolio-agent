@@ -1,6 +1,7 @@
 import yfinance as yf
 
 from agent.state import PortfolioState
+from security.errors import PortfolioAgentError
 
 # ---------------------------------------------------------------------------
 # Mapping: plain-English key → Yahoo Finance ticker symbol
@@ -67,7 +68,14 @@ def macro_fetcher(state: PortfolioState) -> dict:
     macro_context: dict[str, float] = {}
 
     for key, yahoo_symbol in _INDICATORS.items():
-        raw_price = _fetch_price(yahoo_symbol)
+        try:
+            raw_price = _fetch_price(yahoo_symbol)
+        except Exception as exc:
+            raise PortfolioAgentError(
+                "We couldn't fetch current market conditions right now. "
+                "This is usually a temporary issue with the data provider "
+                "— please try again in a minute."
+            ) from exc
 
         if key == "yield_10y":
             # ^TNX quotes the yield multiplied by 10 (e.g. 46.0 = 4.60 %).

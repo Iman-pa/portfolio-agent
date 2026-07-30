@@ -11,12 +11,20 @@ _PORTFOLIO_PATH = Path(__file__).parent.parent.parent / "data" / "portfolio.json
 
 
 def portfolio_loader(state: PortfolioState) -> dict:
-    """Read portfolio.json and prepare the state for the research loop.
+    """Prepare the state for the research loop.
 
-    Returns only the two fields this node owns: `tickers` (the list of stock
-    symbols to research) and `current_ticker_index` (reset to 0 so the
-    research loop always starts from the first ticker).
+    If the caller already supplied `tickers` in the initial state (e.g. the
+    Streamlit UI's editable holdings list), those are used as-is. Otherwise
+    this falls back to reading the default demo portfolio from
+    data/portfolio.json. Either way, `current_ticker_index` is reset to 0 so
+    the research loop always starts from the first ticker.
     """
+    if state.get("tickers"):
+        return {
+            "tickers": state["tickers"],
+            "current_ticker_index": 0,
+        }
+
     # Open the JSON file using the pre-computed absolute path.
     # encoding="utf-8" is explicit best-practice — avoids surprises on
     # Windows where the default encoding can vary by system locale.

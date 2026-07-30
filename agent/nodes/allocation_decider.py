@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -6,6 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import PortfolioState
+from security.errors import PortfolioAgentError
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -14,10 +16,27 @@ load_dotenv()
 # Two .parent calls walk up to the project root, then we descend into prompts/.
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "allocation_decider.yaml"
 
-# Instantiate the Gemini model once at import time so it is reused across
-# every call to allocation_decider() rather than being recreated each run.
-# temperature=0 makes the output deterministic — critical for structured JSON.
-_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+# The Gemini model is instantiated lazily (see _get_llm) rather than at
+# import time. Instantiating eagerly meant a missing GOOGLE_API_KEY crashed
+# the whole app at import — before Streamlit ever had a chance to render a
+# friendly error — because app.py imports agent.graph, which imports this
+# module, before any UI code runs.
+_llm = None
+
+
+def _get_llm() -> ChatGoogleGenerativeAI:
+    global _llm
+    if _llm is None:
+        if not os.environ.get("GOOGLE_API_KEY"):
+            raise PortfolioAgentError(
+                "This demo is misconfigured: no Gemini API key is set on "
+                "the server. Set the GOOGLE_API_KEY environment variable "
+                "to enable analysis runs."
+            )
+        # temperature=0 makes the output deterministic — critical for
+        # structured JSON.
+        _llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    return _llm
 
 
 def _build_correlation_block(correlation_context: dict) -> str:
@@ -218,11 +237,25 @@ def allocation_decider(state: PortfolioState) -> dict:
 
     # Send the assembled messages to Gemini and wait for the response.
     # .invoke() is synchronous — it blocks until the model replies.
-    response = _llm.invoke(messages)
+    try:
+        response = _get_llm().invoke(messages)
+    except PortfolioAgentError:
+        raise
+    except Exception as exc:
+        raise PortfolioAgentError(
+            "The allocation model didn't respond. This is usually a "
+            "temporary issue — please try again in a minute."
+        ) from exc
 
     # response.content is the raw string from the model, expected to be a
     # JSON object like '{"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}'.
-    allocations = _parse_allocations(response.content)
+    try:
+        allocations = _parse_allocations(response.content)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise PortfolioAgentError(
+            "The allocation model returned an unexpected response. "
+            "Please try running the analysis again."
+        ) from exc
 
     # Return only the field this node writes; LangGraph merges it into state.
     return {"allocations": allocations}
