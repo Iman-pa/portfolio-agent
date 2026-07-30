@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: portfolio-agent
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.13
+      # Secrets — set these manually in the Render dashboard (Environment tab),
+      # not here. `sync: false` tells Render to prompt for a value rather than
+      # storing one in this file.
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false
+      # Optional — only needed if you want LangSmith tracing on the deployed
+      # app. Leave unset in the dashboard to skip tracing entirely.
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: portfolio-agent
