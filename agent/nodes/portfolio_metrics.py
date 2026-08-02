@@ -1,7 +1,9 @@
 import math
+import traceback
 
 import pandas as pd
 import yfinance as yf
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from agent.state import PortfolioState
 from security.errors import PortfolioAgentError
@@ -10,6 +12,17 @@ from security.errors import PortfolioAgentError
 # statistics into annualised ones.  252 is the market standard — the NYSE
 # and NASDAQ are open for approximately 252 sessions per year.
 _TRADING_DAYS_PER_YEAR = 252
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _fetch_history(ticker_obj: yf.Ticker) -> pd.DataFrame:
+    """Thin, retryable wrapper around Ticker.history().
+
+    Retries up to 3 times with exponential backoff (1s, 2s, 4s) — absorbs
+    transient rate-limit/timeout failures from Yahoo's undocumented
+    endpoints. Does nothing for a hard, sustained IP block.
+    """
+    return ticker_obj.history(period="1y")
 
 
 def _fetch_daily_returns(ticker: str) -> pd.Series:
@@ -26,8 +39,13 @@ def _fetch_daily_returns(ticker: str) -> pd.Series:
     try:
         # .history() fetches OHLCV data.  period="1y" requests the last 52 weeks
         # of trading sessions.  Only the "Close" column is needed for returns.
-        hist = ticker_obj.history(period="1y")
+        hist = _fetch_history(ticker_obj)
     except Exception as exc:
+        # Logged first so the real cause is visible in the server's own
+        # logs (Render/Streamlit Cloud capture stderr) — without this, only
+        # the friendly message below ever surfaces anywhere.
+        print(f"[portfolio_metrics] history fetch failed for {ticker!r}: {type(exc).__name__}: {exc}")
+        traceback.print_exc()
         raise PortfolioAgentError(
             "We couldn't fetch market data right now. This is usually a "
             "temporary issue with the data provider — please try again in "

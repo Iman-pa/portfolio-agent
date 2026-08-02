@@ -580,9 +580,15 @@ if analyze_clicked:
             except PortfolioAgentError as exc:
                 # Covers network/API failures from yfinance and Gemini —
                 # the agent nodes already wrap those into this friendly,
-                # user-safe message type (see security/errors.py).
+                # user-safe message type (see security/errors.py) and log
+                # the real cause themselves before raising. This is a
+                # defense-in-depth fallback in case that ever isn't true —
+                # `raise PortfolioAgentError(...) from exc` sets __cause__,
+                # so the original exception is still recoverable here.
                 run_failed = True
                 error_message = str(exc)
+                if exc.__cause__ is not None:
+                    print(f"[app] PortfolioAgentError caused by: {type(exc.__cause__).__name__}: {exc.__cause__}")
                 status.update(label="Analysis failed", state="error", expanded=False)
 
             except (KeyError, TypeError, ValueError) as exc:

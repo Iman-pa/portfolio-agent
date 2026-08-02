@@ -1,4 +1,7 @@
+import traceback
+
 import yfinance as yf
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from agent.state import PortfolioState
 from security.errors import PortfolioAgentError
@@ -21,6 +24,7 @@ _INDICATORS: dict[str, str] = {
 }
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
 def _fetch_price(yahoo_ticker: str) -> float:
     """Return the most recent closing price for a Yahoo Finance ticker.
 
@@ -28,6 +32,13 @@ def _fetch_price(yahoo_ticker: str) -> float:
     that skips downloading a full OHLCV history.  Falls back to
     .history(period='1d') when fast_info is unavailable (some index tickers
     behave inconsistently depending on market hours and the yfinance version).
+
+    Retries up to 3 times with exponential backoff (1s, 2s, 4s) before
+    giving up — yfinance calls Yahoo's undocumented endpoints, which are
+    known to intermittently rate-limit or reject requests (especially from
+    cloud/datacenter IP ranges); a short retry absorbs transient failures of
+    that kind. It does nothing for a hard, sustained IP block, which needs a
+    different fix entirely (see the caller's error message).
     """
     # yf.Ticker() creates a lazy handle — no network request happens yet.
     ticker_obj = yf.Ticker(yahoo_ticker)
@@ -71,6 +82,14 @@ def macro_fetcher(state: PortfolioState) -> dict:
         try:
             raw_price = _fetch_price(yahoo_symbol)
         except Exception as exc:
+            # The friendly PortfolioAgentError below is what the visitor
+            # sees; without this, the real cause (rate limit, IP block,
+            # timeout, schema change, ...) is never visible anywhere,
+            # including in the server's own logs. print() goes to stderr,
+            # which Render (and Streamlit Cloud) capture in their log
+            # viewers.
+            print(f"[macro_fetcher] yfinance fetch failed for {yahoo_symbol!r}: {type(exc).__name__}: {exc}")
+            traceback.print_exc()
             raise PortfolioAgentError(
                 "We couldn't fetch current market conditions right now. "
                 "This is usually a temporary issue with the data provider "

@@ -7,6 +7,7 @@
 # allocation_decider can later reason about diversification risk.
 # ---------------------------------------------------------------------------
 
+import traceback
 from datetime import datetime, timedelta
 # datetime: used to get today's date as an end point for the price download.
 # timedelta: used to subtract 90 days from today to get the start point.
@@ -19,6 +20,7 @@ import pandas as pd
 import yfinance as yf
 # yfinance wraps Yahoo Finance's unofficial API.  yf.download() fetches OHLCV
 # (Open, High, Low, Close, Volume) data for one or more tickers in one call.
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from agent.state import PortfolioState
 # Import the shared TypedDict so type checkers and IDEs know the shape of state.
@@ -27,6 +29,23 @@ from security.errors import PortfolioAgentError
 # Friendly exception type — the Streamlit UI catches this to show a clean
 # error state instead of a raw traceback when a ticker is invalid or Yahoo
 # Finance has no data for it.
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _download_prices(tickers: list[str], start_date, end_date) -> pd.DataFrame:
+    """Thin, retryable wrapper around yf.download().
+
+    Retries up to 3 times with exponential backoff (1s, 2s, 4s) — absorbs
+    transient rate-limit/timeout failures from Yahoo's undocumented
+    endpoints. Does nothing for a hard, sustained IP block.
+    """
+    return yf.download(
+        tickers=tickers,
+        start=start_date,
+        end=end_date,
+        auto_adjust=True,
+        progress=False,
+    )
 
 
 def correlation_analyzer(state: PortfolioState) -> dict:
@@ -61,27 +80,16 @@ def correlation_analyzer(state: PortfolioState) -> dict:
     # STEP 3 — Download adjusted daily closing prices for all tickers at once.
     # -----------------------------------------------------------------------
     try:
-        raw = yf.download(
-            tickers=tickers,
-            # Pass the full list — yfinance fetches all tickers in a single HTTP
-            # request, which is faster and rate-limit-friendlier than one call per ticker.
-            start=start_date,
-            # Inclusive start date for the price series.
-            end=end_date,
-            # End date is exclusive in yfinance — it returns data *up to but not
-            # including* this date, so today's partial candle is excluded automatically.
-            auto_adjust=True,
-            # Replace raw OHLCV with adjusted values that account for stock splits
-            # and dividends.  This is important for correlation: a nominal split
-            # creates a sudden price drop that would skew the correlation if unadjusted.
-            progress=False,
-            # Suppress yfinance's tqdm download-progress bar so it doesn't pollute
-            # the server logs or Streamlit output.
-        )
+        raw = _download_prices(tickers, start_date, end_date)
     except Exception as exc:
         # Network hiccups or Yahoo Finance outages surface here as arbitrary
         # exceptions from the underlying HTTP client — wrap them in a message
-        # that's safe to show to a site visitor.
+        # that's safe to show to a site visitor. Logged first so the real
+        # cause is visible in the server's own logs (Render/Streamlit Cloud
+        # capture stderr) — without this, only the friendly message ever
+        # surfaces anywhere.
+        print(f"[correlation_analyzer] yf.download failed for {tickers}: {type(exc).__name__}: {exc}")
+        traceback.print_exc()
         raise PortfolioAgentError(
             "We couldn't fetch market data right now. This is usually a "
             "temporary issue with the data provider — please try again in "

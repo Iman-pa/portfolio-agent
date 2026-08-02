@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 from pathlib import Path
 
 import yaml
@@ -242,6 +243,8 @@ def allocation_decider(state: PortfolioState) -> dict:
     except PortfolioAgentError:
         raise
     except Exception as exc:
+        print(f"[allocation_decider] Gemini call failed: {type(exc).__name__}: {exc}")
+        traceback.print_exc()
         raise PortfolioAgentError(
             "The allocation model didn't respond. This is usually a "
             "temporary issue — please try again in a minute."
@@ -252,6 +255,7 @@ def allocation_decider(state: PortfolioState) -> dict:
     try:
         allocations = _parse_allocations(response.content)
     except (json.JSONDecodeError, TypeError) as exc:
+        print(f"[allocation_decider] failed to parse model response as JSON: {response.content!r}")
         raise PortfolioAgentError(
             "The allocation model returned an unexpected response. "
             "Please try running the analysis again."
