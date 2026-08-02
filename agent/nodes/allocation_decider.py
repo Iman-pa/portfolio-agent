@@ -37,7 +37,17 @@ def _get_llm() -> ChatGoogleGenerativeAI:
             )
         # temperature=0 makes the output deterministic — critical for
         # structured JSON.
-        _llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
+        # "-latest" is a rolling alias Google repoints at whatever it
+        # currently considers the newest lite-flash model — chosen because
+        # gemini-2.0-flash and gemini-2.0-flash-lite both returned
+        # RESOURCE_EXHAUSTED (free-tier quota limit 0 for this project) and
+        # gemini-2.5-flash-lite returned 404 "no longer available to new
+        # users", confirmed via a real generateContent call, not just
+        # presence in the models.list catalog. The tradeoff: Google can
+        # repoint this alias to a different model over time without a code
+        # change here, which is a plausible reason a previously-working
+        # pinned model quietly stopped working in the first place.
+        _llm = ChatGoogleGenerativeAI(model="gemini-flash-lite-latest", temperature=0)
     return _llm
 
 
@@ -192,6 +202,31 @@ def _strip_code_fences(text: str) -> str:
     return match.group(1).strip() if match else text.strip()
 
 
+def _extract_text(content) -> str:
+    """Normalize a LangChain AIMessage's .content into a plain string.
+
+    Some Gemini models (observed with gemini-flash-lite-latest) return
+    .content as a list of typed content blocks —
+    [{"type": "text", "text": "...", "extras": {"signature": "..."}}] —
+    rather than a plain string, apparently tied to "thinking"/signature
+    metadata rather than anything specific to this app's prompt. Older
+    responses returned .content as a plain string directly. Concatenates
+    the text of every "text"-typed block so this works either way; other
+    block types (if any ever appear) are ignored rather than raising.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content)
+
+
 def _parse_allocations(raw_text: str) -> dict[str, dict]:
     """Parse the model's richer JSON response string into a Python dict.
 
@@ -266,10 +301,11 @@ def allocation_decider(state: PortfolioState) -> dict:
             "temporary issue — please try again in a minute."
         ) from exc
 
-    # response.content is the raw string from the model, expected to be a
-    # JSON object like '{"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}'.
+    # response.content is expected to hold a JSON object like
+    # '{"AAPL": 40.0, "NVDA": 35.0, "TSLA": 25.0}' — but not always as a
+    # plain string; see _extract_text().
     try:
-        allocations = _parse_allocations(response.content)
+        allocations = _parse_allocations(_extract_text(response.content))
     except (json.JSONDecodeError, TypeError) as exc:
         print(f"[allocation_decider] failed to parse model response as JSON: {response.content!r}")
         raise PortfolioAgentError(

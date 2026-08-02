@@ -17,10 +17,13 @@ services:
       - key: DEMO_PASSWORD
         sync: false
       # Optional — only needed if you want LangSmith tracing on the deployed
-      # app. Leave unset in the dashboard to skip tracing entirely.
+      # app. Leave both blank in the dashboard to skip tracing entirely;
+      # frontend/app.py also force-disables tracing in code whenever
+      # LANGCHAIN_API_KEY is absent, so a stray "true" here can't cause
+      # LangSmith 401s on its own the way it previously did.
       - key: LANGCHAIN_API_KEY
         sync: false
       - key: LANGCHAIN_TRACING_V2
-        value: "true"
+        sync: false
       - key: LANGCHAIN_PROJECT
         value: portfolio-agent

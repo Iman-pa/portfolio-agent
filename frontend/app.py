@@ -29,6 +29,17 @@ try:
 except Exception:
     pass
 
+# LangSmith tracing is controlled entirely by these env vars, read directly
+# by the langchain/langsmith SDKs — no code here turns it on or off by
+# itself. It must stay off whenever LANGCHAIN_API_KEY is absent:
+# LANGCHAIN_TRACING_V2=true with no key doesn't just skip tracing, it makes
+# every graph run try to send traces and fail with a 401, filling the
+# production logs with noise. Enforced here in code rather than trusting
+# every deployment config (render.yaml, Streamlit Cloud secrets, .env) to
+# always set this pair consistently.
+if not os.environ.get("LANGCHAIN_API_KEY"):
+    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+
 from security.auth import require_auth
 from security.errors import PortfolioAgentError
 from security.identity import get_identifier
