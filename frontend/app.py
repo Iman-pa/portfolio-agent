@@ -265,7 +265,6 @@ require_auth()
 # Header
 # ---------------------------------------------------------------------------
 st.title("📊 Portfolio Allocation Agent")
-st.caption("Powered by Gemini 2.0 Flash · Built with LangGraph")
 
 st.markdown(
     """
