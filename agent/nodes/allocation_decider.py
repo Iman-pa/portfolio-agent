@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import traceback
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def _get_llm() -> ChatGoogleGenerativeAI:
             )
         # temperature=0 makes the output deterministic — critical for
         # structured JSON.
-        _llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+        _llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
     return _llm
 
 
@@ -178,6 +179,19 @@ def _get_strategy_instruction(raw: dict, strategy: str) -> str:
     return raw[yaml_key]
 
 
+# Matches a full response wrapped in a markdown code fence, with an
+# optional language tag on the opening fence — e.g. ```json ... ``` or
+# plain ``` ... ```. Different Gemini model generations vary in how
+# reliably they follow "no markdown fences" instructions, so this is
+# stripped defensively rather than assumed absent.
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
+
+
+def _strip_code_fences(text: str) -> str:
+    match = _CODE_FENCE_RE.match(text.strip())
+    return match.group(1).strip() if match else text.strip()
+
+
 def _parse_allocations(raw_text: str) -> dict[str, dict]:
     """Parse the model's richer JSON response string into a Python dict.
 
@@ -187,13 +201,15 @@ def _parse_allocations(raw_text: str) -> dict[str, dict]:
             "NVDA": {"allocation": 40.0, "confidence": 90, "reason": "..."},
         }
 
-    .strip() removes any leading/trailing whitespace the model may have added.
-    json.loads() raises JSONDecodeError on malformed output, which propagates
-    to the Streamlit error handler rather than silently returning bad data.
-    The parsed dict is returned as-is — each value is already a dict with the
-    three required keys, so no further transformation is needed here.
+    _strip_code_fences() removes a wrapping ```json / ``` fence if the model
+    added one despite the prompt saying not to, then strips leading/trailing
+    whitespace. json.loads() raises JSONDecodeError on malformed output,
+    which propagates to the Streamlit error handler rather than silently
+    returning bad data. The parsed dict is returned as-is — each value is
+    already a dict with the three required keys, so no further
+    transformation is needed here.
     """
-    return json.loads(raw_text.strip())
+    return json.loads(_strip_code_fences(raw_text))
 
 
 def allocation_decider(state: PortfolioState) -> dict:
